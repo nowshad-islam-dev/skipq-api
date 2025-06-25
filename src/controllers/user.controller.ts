@@ -2,7 +2,7 @@ import { RequestHandler } from 'express';
 import prisma from '../prisma';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { newUserEntry, publicUserSchema } from '../types';
+import { newUserEntry, publicUserSchema, updatingUserEntry } from '../types';
 
 // Safe user
 const safeUserSelect = {
@@ -71,14 +71,14 @@ export const createUser: RequestHandler = async (
 
   const existingUser = await prisma.user.findFirst({
     where: {
-      OR: [{ email }, { phone }],
+      OR: [{ email }, { phone }, { username }],
     },
   });
 
   if (existingUser) {
     return res
       .status(400)
-      .json({ error: 'User with this email/phone already exists' });
+      .json({ error: 'Email/phone/username already exists' });
   }
 
   try {
@@ -109,12 +109,59 @@ export const updateUser: RequestHandler = async (
   const id = Number(req.params.id);
   if (isNaN(id)) return res.status(400).json({ error: 'Invalid ID format' });
 
+  const parseResult = updatingUserEntry.safeParse(req.body);
+  if (!parseResult.success) {
+    return res.status(400).json({ error: parseResult.error.format() });
+  }
+
+  const validatedData = parseResult.data;
+
+  // console.log('validatedData:', validatedData); // Remove log later
+
+  const existingUser = await prisma.user.findFirst({
+    where: { id },
+  });
+
+  if (!existingUser) {
+    return res
+      .status(400)
+      .json({ error: 'User with this email/phone does not exist' });
+  }
+
+  const passwordMatches = await bcrypt.compare(
+    validatedData.password,
+    existingUser.hashedPassword,
+  );
+
+  if (!passwordMatches) {
+    return res.status(401).json({ error: 'Invalid credentials' });
+  }
+
   try {
+    const newPasswordHash =
+      validatedData.newPassword &&
+      (await bcrypt.hash(validatedData.newPassword, 10));
+
     const updatedUser = await prisma.user.update({
       where: { id },
-      data: req.body,
+      data: {
+        email: validatedData.email || existingUser.email,
+        phone: validatedData.phone || existingUser.phone,
+        hashedPassword: newPasswordHash ?? existingUser.hashedPassword,
+      },
+      select: safeUserSelect,
     });
-    res.json(updatedUser);
+    const token = jwt.sign(
+      {
+        userId: updatedUser.id,
+        email: updatedUser.email,
+        username: updatedUser.username,
+      },
+      process.env.JWT_SECRET as string,
+      { expiresIn: '30d' },
+    );
+
+    res.json({ token, updatedUser });
   } catch (error) {
     res.status(500).json({ error: 'Failed to update user' });
   }

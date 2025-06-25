@@ -25,7 +25,26 @@ export const publicUserSchema = z.object({
   createdAt: z.date(),
 });
 
+export const updatingUserEntry = z
+  .object({
+    email: z.email().optional(),
+    phone: z.string().optional(),
+    newPassword: z.string().min(6).optional(),
+    password: z.string().min(6),
+  })
+  .refine(
+    (data) =>
+      data.email !== undefined ||
+      data.phone !== undefined ||
+      data.newPassword !== undefined,
+
+    {
+      error: 'At least one field must be provided to update',
+    },
+  );
+
 // Inferred TypeScript types from Zod schemas
 export type UserFromDb = z.infer<typeof newUserEntryToDb>;
 export type NewUserEntry = z.infer<typeof newUserEntry>;
 export type PublicUser = z.infer<typeof publicUserSchema>;
+export type UpdatingUser = z.infer<typeof updatingUserEntry>;

@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import { corseOptions, morganMiddleware } from './middlewares/middleware';
+import { corseOptions, morganMiddleware } from './middlewares';
 import userRouter from './routes/user.route';
 const app = express();
 app.use(express.json());

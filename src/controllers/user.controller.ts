@@ -3,6 +3,7 @@ import prisma from '../prisma';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { newUserEntry, publicUserSchema, updatingUserEntry } from '../types';
+import uploadToCloudinary from '../utils/cloudinary';
 
 // Safe user
 const safeUserSelect = {
@@ -10,6 +11,7 @@ const safeUserSelect = {
   email: true,
   username: true,
   phone: true,
+  profilePicture: true,
   createdAt: true,
 };
 
@@ -102,6 +104,7 @@ export const createUser: RequestHandler = async (
   }
 };
 
+// Update a user
 export const updateUser: RequestHandler = async (
   req,
   res,
@@ -116,7 +119,17 @@ export const updateUser: RequestHandler = async (
 
   const validatedData = parseResult.data;
 
-  // console.log('validatedData:', validatedData); // Remove log later
+  // Check if all the fields are empty ( including req.file)
+  const noUpdatesProvided =
+    !validatedData.email &&
+    !validatedData.newPassword &&
+    validatedData.phone &&
+    !req.file;
+  if (noUpdatesProvided) {
+    return res
+      .status(400)
+      .json({ error: 'At least one field must be provided to update' });
+  }
 
   const existingUser = await prisma.user.findFirst({
     where: { id },
@@ -137,6 +150,17 @@ export const updateUser: RequestHandler = async (
     return res.status(401).json({ error: 'Invalid credentials' });
   }
 
+  let newProfilePicUrl: string | undefined = undefined;
+
+  if (req.file) {
+    try {
+      const uploadResult: any = await uploadToCloudinary(req.file.buffer);
+      newProfilePicUrl = uploadResult.secure_url;
+    } catch (error) {
+      return res.status(500).json({ error: 'Profile picture upload failed' });
+    }
+  }
+
   try {
     const newPasswordHash =
       validatedData.newPassword &&
@@ -145,9 +169,10 @@ export const updateUser: RequestHandler = async (
     const updatedUser = await prisma.user.update({
       where: { id },
       data: {
-        email: validatedData.email || existingUser.email,
-        phone: validatedData.phone || existingUser.phone,
+        email: validatedData.email ?? existingUser.email,
+        phone: validatedData.phone ?? existingUser.phone,
         hashedPassword: newPasswordHash ?? existingUser.hashedPassword,
+        profilePicture: newProfilePicUrl ?? existingUser.profilePicture,
       },
       select: safeUserSelect,
     });
@@ -229,3 +254,6 @@ export const loginUser: RequestHandler = async (
     res.status(500).json({ error: 'Internal server error' });
   }
 };
+
+// Logout a user
+export const logoutUser: RequestHandler = () => {};

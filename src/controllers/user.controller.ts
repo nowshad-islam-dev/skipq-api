@@ -154,7 +154,10 @@ export const updateUser: RequestHandler = async (
 
   if (req.file) {
     try {
-      const uploadResult: any = await uploadToCloudinary(req.file.buffer);
+      const uploadResult: any = await uploadToCloudinary(
+        req.file.buffer,
+        'profile_pictures',
+      );
       newProfilePicUrl = uploadResult.secure_url;
     } catch (error) {
       return res.status(500).json({ error: 'Profile picture upload failed' });
